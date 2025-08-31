@@ -62,6 +62,8 @@ services:
     networks:
       - radius-network
     restart: unless-stopped
+    healthcheck:
+      disable: true
 
 
 volumes:
