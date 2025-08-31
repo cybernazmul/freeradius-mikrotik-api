@@ -42,7 +42,7 @@ services:
       - "3799:3799/udp"  # CoA/Disconnect
     volumes:
       # Mount the extracted raddb configuration directory
-      - ./raddb:/etc/raddb:ro
+      - ./raddb:/etc/freeradius:ro
     networks:
       - radius-network
     command: ["radiusd", "-X", "-f"]
