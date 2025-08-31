@@ -17,12 +17,6 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/02-init.sql:ro
     networks:
       - radius-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "radius", "-pradiuspass"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
   freeradius-server:
     image: freeradius/freeradius-server:latest
@@ -49,13 +43,7 @@ services:
       - radius-network
     command: ["radiusd", "-X", "-f"]
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "radtest", "test", "test", "localhost", "0", "testing123"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
+    
   api-service:
     build: 
       context: ./api-service
@@ -76,12 +64,7 @@ services:
     networks:
       - radius-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+
 
 volumes:
   radius-db-data:
