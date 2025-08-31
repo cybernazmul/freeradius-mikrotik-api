@@ -9,9 +9,7 @@ docker-compose.override.yml
 .docker/
 
 # Database files and dumps
-*.sql
 *.dump
-*.db
 db_data/
 mysql_data/
 postgres_data/
