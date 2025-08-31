@@ -511,6 +511,7 @@ authorize {
 		if("%{sql:INSERT INTO last_nas (user_name,nas_ip) VALUES('%{SQL-User-Name}','%{NAS-IP-Address}') ON DUPLICATE KEY UPDATE nas_ip='%{NAS-IP-Address}'}"){
 			} 
 			}
+
 	#
 	#  If no other module has claimed responsibility for
 	#  authentication, then try to use PAP.  This allows the
