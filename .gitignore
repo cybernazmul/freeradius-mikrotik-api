@@ -140,9 +140,9 @@ docker-compose.local.yml
 local/
 dev/
 
-# Screenshots directory structure but keep README
-screenshots/
-!screenshots/README.md
+# # Screenshots directory structure but keep README
+# screenshots/
+# !screenshots/README.md
 
 # Monitoring and metrics data
 prometheus_data/
