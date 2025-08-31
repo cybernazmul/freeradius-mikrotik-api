@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 import os
 import subprocess
+import time
 from contextlib import asynccontextmanager
 import mysql.connector
 from mysql.connector import pooling
@@ -28,13 +29,8 @@ DB_CONFIG = {
     'charset': 'utf8mb4'
 }
 
-# Create connection pool
-connection_pool = pooling.MySQLConnectionPool(
-    pool_name="radius_pool",
-    pool_size=10,
-    pool_reset_session=True,
-    **DB_CONFIG
-)
+# Global connection pool - will be initialized lazily
+connection_pool = None
 
 # Security Configuration
 BEARER_TOKEN = os.getenv('API_KEY', 'your-secret-bearer-token-here')
@@ -65,9 +61,32 @@ class PaginatedResponse(BaseModel):
 # Database Connection Manager
 class DatabaseManager:
     def __init__(self):
-        self.pool = connection_pool
+        self.pool = None
+    
+    def _ensure_pool(self):
+        if self.pool is None:
+            max_retries = 30
+            retry_delay = 2
+            
+            for attempt in range(max_retries):
+                try:
+                    self.pool = pooling.MySQLConnectionPool(
+                        pool_name="radius_pool",
+                        pool_size=10,
+                        pool_reset_session=True,
+                        **DB_CONFIG
+                    )
+                    logger.info("Database connection pool created successfully")
+                    return
+                except mysql.connector.Error as e:
+                    if attempt == max_retries - 1:
+                        logger.error(f"Failed to create database pool after {max_retries} attempts: {e}")
+                        raise HTTPException(status_code=503, detail="Database connection failed")
+                    logger.warning(f"Database connection attempt {attempt + 1} failed, retrying in {retry_delay}s: {e}")
+                    time.sleep(retry_delay)
     
     def get_connection(self):
+        self._ensure_pool()
         return self.pool.get_connection()
     
     def execute_query(self, query: str, params: Optional[tuple] = None, fetch: bool = True):
