@@ -22,8 +22,7 @@ services:
     image: freeradius/freeradius-server:latest
     container_name: freeradius-server
     depends_on:
-      radius-db:
-        condition: service_healthy
+      - radius-db
     environment:
       # Database connection environment variables
       RADIUS_SQL_HOST: radius-db
@@ -50,8 +49,7 @@ services:
       dockerfile: Dockerfile
     container_name: radius-api
     depends_on:
-      radius-db:
-        condition: service_healthy
+      - radius-db
     environment:
       DB_HOST: radius-db
       DB_USER: radius
