@@ -19,8 +19,8 @@ redis_data/
 *.log
 logs/
 *.log.*
-raddb/log/
-freeradius/log/
+# raddb/log/
+# freeradius/log/
 
 # Runtime and temporary files
 *.pid
@@ -29,29 +29,29 @@ freeradius/log/
 tmp/
 temp/
 
-# SSL/TLS certificates and keys (keep templates, ignore generated)
-raddb/certs/*.pem
-raddb/certs/*.key
-raddb/certs/*.crt
-raddb/certs/*.csr
-raddb/certs/*.p12
-raddb/certs/*.der
-raddb/certs/ca.crl
-raddb/certs/index.txt*
-raddb/certs/serial*
-raddb/certs/[0-9][0-9].pem
-!raddb/certs/README.md
-!raddb/certs/Makefile
-!raddb/certs/*.cnf
-!raddb/certs/bootstrap
-!raddb/certs/xpextensions
-!raddb/certs/passwords.mk
+# # SSL/TLS certificates and keys (keep templates, ignore generated)
+# raddb/certs/*.pem
+# raddb/certs/*.key
+# raddb/certs/*.crt
+# raddb/certs/*.csr
+# raddb/certs/*.p12
+# raddb/certs/*.der
+# raddb/certs/ca.crl
+# raddb/certs/index.txt*
+# raddb/certs/serial*
+# raddb/certs/[0-9][0-9].pem
+# !raddb/certs/README.md
+# !raddb/certs/Makefile
+# !raddb/certs/*.cnf
+# !raddb/certs/bootstrap
+# !raddb/certs/xpextensions
+# !raddb/certs/passwords.mk
 
-# FreeRADIUS runtime files
-raddb/*.pid
-raddb/radius.log*
-raddb/radacct/*
-raddb/detail/*
+# # FreeRADIUS runtime files
+# raddb/*.pid
+# raddb/radius.log*
+# raddb/radacct/*
+# raddb/detail/*
 
 # Python cache and virtual environments
 __pycache__/
