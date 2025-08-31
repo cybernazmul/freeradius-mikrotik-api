@@ -25,7 +25,7 @@ A **production-ready, self-contained RADIUS service** for ISPs that integrates *
 ### Docker Deployment
 - `freeradius` – Authentication & accounting
 - `api-service` – FastAPI-based MikroTik integration
-- `db` – PostgreSQL with partitioning
+- `db` – MySQL with partitioning
 - `redis` – Online sessions cache
 
 ---
@@ -83,7 +83,7 @@ A **production-ready, self-contained RADIUS service** for ISPs that integrates *
   - Authentication: UDP 1812
   - Accounting: UDP 1813  
   - CoA/Disconnect: UDP 3799
-- **PostgreSQL Database**: localhost:5432
+- **MySQL Database**: localhost:5432
 - **Redis Cache**: localhost:6379
 
 ---
@@ -136,8 +136,8 @@ curl -H "Authorization: Bearer your-secret-bearer-token-here" \
 
 Set in `.env` file:
 - `API_KEY` - Bearer token for API authentication
-- `DB_HOST`, `DB_USER`, `DB_PASS` - PostgreSQL connection
-- `POSTGRES_PASSWORD` - PostgreSQL root password
+- `DB_HOST`, `DB_USER`, `DB_PASS` - MySQL connection
+- `POSTGRES_PASSWORD` - MySQL root password
 - `REDIS_URL` - Redis connection string
 - `MIKROTIK_API_HOST`, `MIKROTIK_API_USER`, `MIKROTIK_API_PASS` - MikroTik RouterOS API
 
@@ -251,7 +251,7 @@ docker exec -it freeradius-server radiusd -X
 - Monitor ghost session cleanup
 
 ### Backup & Recovery
-- Regular PostgreSQL backups with partitioning consideration
+- Regular MySQL backups with partitioning consideration
 - Redis persistence configuration
 - FreeRADIUS configuration backup
 - API service configuration backup
