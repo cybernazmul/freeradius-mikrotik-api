@@ -59,20 +59,18 @@ A **production-ready, self-contained RADIUS service** for ISPs that integrates *
 ## 📸 Screenshots
 
 ### API Dashboard
-![API Dashboard](screenshots/api-dashboard.png)
+![API Dashboard](screenshots/api-dashboard-1.png)
 *FastAPI management interface showing user management and service status*
 
 ### Swagger Documentation  
-![Swagger Docs](screenshots/swagger-docs.png)
+![Swagger Docs](screenshots/api-dashboard-2.png)
 *Interactive API documentation at http://localhost:8000/docs*
 
 ### Online Sessions View
-![Online Sessions](screenshots/online-sessions.png)
+![Online Sessions](screenshots/api-dashboard-3.png)
 *Real-time view of active RADIUS sessions*
 
-### MikroTik Integration
-![MikroTik Setup](screenshots/mikrotik-setup.png)
-*MikroTik router configuration for RADIUS authentication*
+
 
 ---
 
