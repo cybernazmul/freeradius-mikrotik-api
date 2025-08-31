@@ -1,0 +1,151 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Docker and containers
+docker-compose.override.yml
+.docker/
+
+# Database files and dumps
+*.sql
+*.dump
+*.db
+db_data/
+mysql_data/
+postgres_data/
+redis_data/
+
+# Logs
+*.log
+logs/
+*.log.*
+raddb/log/
+freeradius/log/
+
+# Runtime and temporary files
+*.pid
+*.sock
+*.tmp
+tmp/
+temp/
+
+# SSL/TLS certificates and keys (keep templates, ignore generated)
+raddb/certs/*.pem
+raddb/certs/*.key
+raddb/certs/*.crt
+raddb/certs/*.csr
+raddb/certs/*.p12
+raddb/certs/*.der
+raddb/certs/ca.crl
+raddb/certs/index.txt*
+raddb/certs/serial*
+raddb/certs/[0-9][0-9].pem
+!raddb/certs/README.md
+!raddb/certs/Makefile
+!raddb/certs/*.cnf
+!raddb/certs/bootstrap
+!raddb/certs/xpextensions
+!raddb/certs/passwords.mk
+
+# FreeRADIUS runtime files
+raddb/*.pid
+raddb/radius.log*
+raddb/radacct/*
+raddb/detail/*
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env/
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Node.js (if using any frontend tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Backup files
+*.bak
+*.backup
+*.orig
+backup/
+backups/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Package managers
+Pipfile.lock
+poetry.lock
+
+# Local development overrides
+docker-compose.local.yml
+local/
+dev/
+
+# Screenshots directory structure but keep README
+screenshots/
+!screenshots/README.md
+
+# Monitoring and metrics data
+prometheus_data/
+grafana_data/

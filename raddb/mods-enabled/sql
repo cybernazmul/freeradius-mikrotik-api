@@ -1,0 +1,151 @@
+#
+# SQL module configuration for MySQL
+#
+sql {
+    driver = "rlm_sql_mysql"
+    
+    # Connection info
+    server = "radius-db"
+    port = 3306
+    login = "radius"
+    password = "radiuspass"
+    radius_db = "radius"
+    
+    # Set to 'yes' to read radius clients from the database ('nas' table)
+    read_clients = yes
+    
+    # Set to 'yes' to read radius profiles from the database
+    read_profiles = yes
+    
+    # Delete old sessions from the database (default: no)
+    delete_stale_sessions = yes
+    
+    # Print all SQL statements when in debug mode (-x)
+    sqltrace = no
+    sqltracefile = ${logdir}/sqltrace.sql
+    
+    # Number of connections to make to database
+    num_sql_socks = 5
+    
+    # Lifetime of database connections (in seconds)
+    lifetime = 0
+    
+    # Maximum number of queries to run before reconnecting
+    max_queries = 0
+    
+    # SQL query definitions
+    sql_user_name = "%{User-Name}"
+    
+    # Check password query
+    authorize_check_query = "SELECT id, username, attribute, value, op \
+        FROM radcheck \
+        WHERE username = '%{SQL-User-Name}' \
+        ORDER BY id"
+    
+    # Reply attributes query  
+    authorize_reply_query = "SELECT id, username, attribute, value, op \
+        FROM radreply \
+        WHERE username = '%{SQL-User-Name}' \
+        ORDER BY id"
+    
+    # Group membership query
+    authorize_group_check_query = "SELECT id, groupname, attribute, \
+        Value, op \
+        FROM radgroupcheck \
+        WHERE groupname = '%{Sql-Group}' \
+        ORDER BY id"
+    
+    authorize_group_reply_query = "SELECT id, groupname, attribute, \
+        value, op \
+        FROM radgroupreply \
+        WHERE groupname = '%{Sql-Group}' \
+        ORDER BY id"
+        
+    # User group membership
+    group_membership_query = "SELECT groupname \
+        FROM radusergroup \
+        WHERE username = '%{SQL-User-Name}' \
+        ORDER BY priority"
+    
+    # Accounting queries
+    accounting {
+        reference = "%{tolower:type.%{Acct-Status-Type}.query}"
+        
+        type {
+            accounting-on {
+                query = "UPDATE radacct \
+                    SET acctstoptime = NOW(), \
+                    acctsessiontime = unix_timestamp(NOW()) - \
+                    unix_timestamp(acctstarttime), \
+                    acctterminatecause = '%{Acct-Terminate-Cause}', \
+                    acctstopdelay = %{%{Acct-Delay-Time}:-0} \
+                    WHERE acctstoptime IS NULL \
+                    AND nasipaddress = '%{NAS-IP-Address}' \
+                    AND acctstarttime <= NOW()"
+            }
+            
+            accounting-off {
+                query = "UPDATE radacct \
+                    SET acctstoptime = NOW(), \
+                    acctsessiontime = unix_timestamp(NOW()) - \
+                    unix_timestamp(acctstarttime), \
+                    acctterminatecause = '%{Acct-Terminate-Cause}', \
+                    acctstopdelay = %{%{Acct-Delay-Time}:-0} \
+                    WHERE acctstoptime IS NULL \
+                    AND nasipaddress = '%{NAS-IP-Address}' \
+                    AND acctstarttime <= NOW()"
+            }
+            
+            start {
+                query = "INSERT INTO radacct \
+                    (acctsessionid, acctuniqueid, username, \
+                    realm, nasipaddress, nasportid, \
+                    nasporttype, acctstarttime, acctupdatetime, \
+                    acctsessiontime, acctauthentic, connectinfo_start, \
+                    calledstationid, callingstationid, acctterminatecause, \
+                    servicetype, framedprotocol, framedipaddress) \
+                    VALUES('%{Acct-Session-Id}', '%{Acct-Unique-Session-Id}', \
+                    '%{SQL-User-Name}', '%{Realm}', '%{NAS-IP-Address}', \
+                    '%{NAS-Port}', '%{NAS-Port-Type}', \
+                    NOW(), NOW(), '0', '%{Acct-Authentic}', \
+                    '%{Connect-Info}', '%{Called-Station-Id}', \
+                    '%{Calling-Station-Id}', '', '%{Service-Type}', \
+                    '%{Framed-Protocol}', '%{Framed-IP-Address}')"
+            }
+            
+            interim-update {
+                query = "UPDATE radacct SET \
+                    framedipaddress = '%{Framed-IP-Address}', \
+                    acctupdatetime = NOW(), \
+                    acctsessiontime = %{%{Acct-Session-Time}:-NULL}, \
+                    acctinputoctets = %{%{Acct-Input-Octets}:-NULL}, \
+                    acctoutputoctets = %{%{Acct-Output-Octets}:-NULL} \
+                    WHERE acctsessionid = '%{Acct-Session-Id}' \
+                    AND username = '%{SQL-User-Name}' \
+                    AND nasipaddress = '%{NAS-IP-Address}'"
+            }
+            
+            stop {
+                query = "UPDATE radacct SET \
+                    acctstoptime = NOW(), \
+                    acctsessiontime = %{%{Acct-Session-Time}:-NULL}, \
+                    acctinputoctets = %{%{Acct-Input-Octets}:-NULL}, \
+                    acctoutputoctets = %{%{Acct-Output-Octets}:-NULL}, \
+                    acctterminatecause = '%{Acct-Terminate-Cause}', \
+                    acctstopdelay = %{%{Acct-Delay-Time}:-0} \
+                    WHERE acctsessionid = '%{Acct-Session-Id}' \
+                    AND username = '%{SQL-User-Name}' \
+                    AND nasipaddress = '%{NAS-IP-Address}'"
+            }
+        }
+    }
+    
+    # Post-auth queries
+    post-auth {
+        query = "INSERT INTO radpostauth \
+            (username, pass, reply, authdate) \
+            VALUES ('%{User-Name}', \
+            '%{%{User-Password}:-%{Chap-Password}}', \
+            '%{reply:Packet-Type}', NOW())"
+    }
+}

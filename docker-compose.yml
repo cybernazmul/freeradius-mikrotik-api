@@ -1,0 +1,90 @@
+version: "3.8"
+
+services:
+  radius-db:
+    image: mysql:8.0
+    container_name: radius-db
+    environment:
+      MYSQL_ROOT_PASSWORD: radiusroot
+      MYSQL_DATABASE: radius
+      MYSQL_USER: radius
+      MYSQL_PASSWORD: radiuspass
+    ports:
+      - "3306:3306"
+    volumes:
+      - radius-db-data:/var/lib/mysql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/init.sql:/docker-entrypoint-initdb.d/02-init.sql:ro
+    networks:
+      - radius-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "radius", "-pradiuspass"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  freeradius-server:
+    image: freeradius/freeradius-server:latest
+    container_name: freeradius-server
+    depends_on:
+      radius-db:
+        condition: service_healthy
+    environment:
+      # Database connection environment variables
+      RADIUS_SQL_HOST: radius-db
+      RADIUS_SQL_USER: radius
+      RADIUS_SQL_PASS: radiuspass
+      RADIUS_SQL_DB: radius
+    ports:
+      - "1812:1812/udp"  # Authentication
+      - "1813:1813/udp"  # Accounting
+      - "3799:3799/udp"  # CoA/Disconnect
+    volumes:
+      # Mount the extracted raddb configuration directory
+      - ./raddb:/etc/raddb:ro
+    networks:
+      - radius-network
+    command: ["radiusd", "-X", "-f"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "radtest", "test", "test", "localhost", "0", "testing123"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  api-service:
+    build: 
+      context: ./api-service
+      dockerfile: Dockerfile
+    container_name: radius-api
+    depends_on:
+      radius-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: radius-db
+      DB_USER: radius
+      DB_PASS: radiuspass
+      DB_NAME: radius
+      DB_PORT: 3306
+      API_KEY: ${API_KEY:-your-secret-bearer-token-here}
+    ports:
+      - "8000:8000"
+    networks:
+      - radius-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  radius-db-data:
+    driver: local
+
+networks:
+  radius-network:
+    driver: bridge
