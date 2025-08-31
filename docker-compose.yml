@@ -44,7 +44,7 @@ services:
       # Mount the extracted raddb configuration directory
       - ./raddb:/etc/raddb:ro
       # Mount certificates to expected FreeRADIUS path
-      - ./raddb/certs:/etc/freeradius/certs:ro
+      - ./raddb:/etc/freeradius:ro
     networks:
       - radius-network
     command: ["radiusd", "-X", "-f"]
