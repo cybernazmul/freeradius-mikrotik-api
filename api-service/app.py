@@ -3,7 +3,7 @@ FastAPI RADIUS API using raw MySQL queries (no ORM)
 Lightweight alternative to SQLAlchemy
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 import os
 import subprocess
@@ -60,6 +60,23 @@ class PaginatedResponse(BaseModel):
 
 class DisconnectUserRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
+
+class NasUpdate(BaseModel):
+    shortname: Optional[str] = Field(None, max_length=32)
+    secret: Optional[str] = Field(None, max_length=60)
+    type: Optional[str] = Field(None, max_length=30)
+    description: Optional[str] = Field(None, max_length=200)
+
+class PackageUpdate(BaseModel):
+    pool: Optional[str] = Field(None, min_length=1, max_length=253)
+
+class ChangePackageRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=64)
+    package: str = Field(..., min_length=1, max_length=64)
+
+class DataCleanupRequest(BaseModel):
+    retain_days: int = Field(..., ge=1, le=3650, description="Number of days to retain data (1-3650)")
+    confirm: bool = Field(default=False, description="Confirm deletion - set to true to execute")
 
 # Database Connection Manager
 class DatabaseManager:
@@ -147,6 +164,39 @@ class DatabaseManager:
 
 # Initialize database manager
 db_manager = DatabaseManager()
+
+# Date Validation Utility
+def validate_date_range(start_date: str, end_date: str):
+    """Enhanced date range validation with additional checks."""
+    try:
+        # Parse dates
+        start = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        # Basic range validation
+        if start > end:
+            raise HTTPException(status_code=400, detail="start_date must be <= end_date")
+        
+        # Prevent future dates
+        today = date.today()
+        if start > today:
+            raise HTTPException(status_code=400, detail="start_date cannot be in the future")
+        if end > today:
+            raise HTTPException(status_code=400, detail="end_date cannot be in the future")
+            
+        # Limit date range (max 1 year)
+        if (end - start).days > 365:
+            raise HTTPException(status_code=400, detail="Date range cannot exceed 1 year")
+            
+        # Prevent excessively old dates (e.g., before 2000)
+        min_date = date(2000, 1, 1)
+        if start < min_date:
+            raise HTTPException(status_code=400, detail="start_date cannot be before 2000-01-01")
+            
+        return start_date, end_date
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD (example: 2025-09-01)")
 
 # Dependency Functions
 async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -237,6 +287,75 @@ async def get_packages(
     
     return PaginatedResponse(count=count, data=packages)
 
+@app.delete("/package/{package_name}", response_model=StatusResponse)
+async def delete_package(
+    package_name: str,
+    token: str = Depends(verify_token)
+):
+    """Delete a package and all its associated configurations."""
+    
+    # Check if package exists
+    check_query = "SELECT COUNT(*) as count FROM radgroupcheck WHERE groupname = %s"
+    result = db_manager.execute_query(check_query, (package_name,))
+    
+    if result[0]['count'] == 0:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    # Check if any users are using this package
+    users_query = "SELECT COUNT(*) as count FROM radusergroup WHERE groupname = %s"
+    users_result = db_manager.execute_query(users_query, (package_name,))
+    
+    if users_result[0]['count'] > 0:
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Cannot delete package. {users_result[0]['count']} user(s) are using this package"
+        )
+    
+    # Delete package configurations
+    queries = [
+        ("DELETE FROM radgroupcheck WHERE groupname = %s", (package_name,)),
+        ("DELETE FROM radgroupreply WHERE groupname = %s", (package_name,))
+    ]
+    
+    db_manager.execute_transaction(queries)
+    return StatusResponse(message=f"Package '{package_name}' deleted successfully")
+
+@app.put("/package/{package_name}", response_model=StatusResponse)
+async def update_package(
+    package_name: str,
+    package_update: PackageUpdate,
+    token: str = Depends(verify_token)
+):
+    """Update package configuration."""
+    
+    # Check if package exists
+    check_query = "SELECT COUNT(*) as count FROM radgroupcheck WHERE groupname = %s"
+    result = db_manager.execute_query(check_query, (package_name,))
+    
+    if result[0]['count'] == 0:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    if package_update.pool is None:
+        raise HTTPException(status_code=400, detail="No fields provided for update")
+    
+    # Update the pool in radgroupreply table
+    update_query = """
+        UPDATE radgroupreply 
+        SET value = %s 
+        WHERE groupname = %s AND attribute = 'Framed-Pool'
+    """
+    affected_rows = db_manager.execute_query(update_query, (package_update.pool, package_name), fetch=False)
+    
+    if affected_rows == 0:
+        # If no Framed-Pool attribute exists, create it
+        insert_query = """
+            INSERT INTO radgroupreply (groupname, attribute, op, value) 
+            VALUES (%s, %s, %s, %s)
+        """
+        db_manager.execute_query(insert_query, (package_name, 'Framed-Pool', '=', package_update.pool), fetch=False)
+    
+    return StatusResponse(message=f"Package '{package_name}' updated successfully")
+
 # User Management
 @app.post("/user", response_model=StatusResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
@@ -303,32 +422,88 @@ async def delete_user(
     db_manager.execute_transaction(queries)
     return StatusResponse(message="User deleted successfully")
 
+@app.post("/change-package", response_model=StatusResponse)
+async def change_user_package(
+    request: ChangePackageRequest,
+    token: str = Depends(verify_token)
+):
+    """Change user's package assignment by updating radusergroup table."""
+    
+    # Validate user exists
+    user_check_query = "SELECT COUNT(*) as count FROM radcheck WHERE username = %s"
+    user_result = db_manager.execute_query(user_check_query, (request.username,))
+    
+    if user_result[0]['count'] == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Validate package exists
+    package_check_query = "SELECT COUNT(*) as count FROM radgroupcheck WHERE groupname = %s"
+    package_result = db_manager.execute_query(package_check_query, (request.package,))
+    
+    if package_result[0]['count'] == 0:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    # Check if user already has a package assignment in radusergroup
+    existing_query = "SELECT COUNT(*) as count FROM radusergroup WHERE username = %s"
+    existing_result = db_manager.execute_query(existing_query, (request.username,))
+    
+    if existing_result[0]['count'] > 0:
+        # Update existing package assignment
+        update_query = "UPDATE radusergroup SET groupname = %s WHERE username = %s"
+        db_manager.execute_query(update_query, (request.package, request.username), fetch=False)
+    else:
+        # Insert new package assignment
+        insert_query = "INSERT INTO radusergroup (username, groupname, priority) VALUES (%s, %s, %s)"
+        db_manager.execute_query(insert_query, (request.username, request.package, 1), fetch=False)
+    
+    return StatusResponse(message=f"User '{request.username}' package changed to '{request.package}' successfully")
+
 # Accounting
-@app.get("/acct/{username}/{limit}/{offset}", response_model=PaginatedResponse)
-async def get_user_accounting(
+@app.get("/acct/{username}/{start_date}/{end_date}/{limit}/{offset}", response_model=PaginatedResponse)
+async def get_user_accounting_by_date_range(
     username: str,
+    start_date: str,
+    end_date: str,
     limit: int,
     offset: int,
     token: str = Depends(verify_token)
 ):
-    """Get user accounting records."""
+    """Get user accounting records within a date range."""
     
-    # Get count
-    count_query = "SELECT COUNT(*) as count FROM radacct WHERE username = %s"
-    count_result = db_manager.execute_query(count_query, (username,))
+    # Validate date range
+    validate_date_range(start_date, end_date)
+    
+    # Check if user exists
+    user_query = "SELECT COUNT(*) as count FROM radcheck WHERE username = %s"
+    user_result = db_manager.execute_query(user_query, (username,))
+    
+    if user_result[0]['count'] == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get count with date range filter
+    count_query = """
+        SELECT COUNT(*) as count 
+        FROM radacct 
+        WHERE username = %s 
+          AND DATE(acctstarttime) >= %s 
+          AND DATE(acctstarttime) <= %s
+    """
+    count_result = db_manager.execute_query(count_query, (username, start_date, end_date))
     count = count_result[0]['count']
     
-    # Get records
+    # Get records with date range filter
     acct_query = """
         SELECT radacctid, username, acctterminatecause, callingstationid, 
                nasipaddress, acctstarttime, acctupdatetime, acctstoptime,
                acctsessiontime, acctinputoctets, acctoutputoctets, framedipaddress
         FROM radacct 
         WHERE username = %s 
-        ORDER BY radacctid 
+          AND DATE(acctstarttime) >= %s 
+          AND DATE(acctstarttime) <= %s
+        ORDER BY acctstarttime DESC
         LIMIT %s OFFSET %s
     """
-    records = db_manager.execute_query(acct_query, (username, limit, offset))
+    records = db_manager.execute_query(acct_query, (username, start_date, end_date, limit, offset))
     
     return PaginatedResponse(count=count, data=records)
 
@@ -379,6 +554,53 @@ async def get_user_online_status(
     status_msg = "Online" if online_result[0]['count'] > 0 else "Offline"
     return {"status": status_msg}
 
+# Authentication Logs
+@app.get("/authlog/{username}/{start_date}/{end_date}/{limit}/{offset}", response_model=PaginatedResponse)
+async def get_user_auth_logs_by_date_range(
+    username: str,
+    start_date: str,
+    end_date: str,
+    limit: int,
+    offset: int,
+    token: str = Depends(verify_token)
+):
+    """Get authentication logs for a specific user from radpostauth table within a date range."""
+    
+    # Validate date range
+    validate_date_range(start_date, end_date)
+    
+    # Check if user exists
+    user_query = "SELECT COUNT(*) as count FROM radcheck WHERE username = %s"
+    user_result = db_manager.execute_query(user_query, (username,))
+    
+    if user_result[0]['count'] == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get count of auth logs for the user with date range filter
+    count_query = """
+        SELECT COUNT(*) as count 
+        FROM radpostauth 
+        WHERE username = %s 
+          AND DATE(authdate) >= %s 
+          AND DATE(authdate) <= %s
+    """
+    count_result = db_manager.execute_query(count_query, (username, start_date, end_date))
+    count = count_result[0]['count']
+    
+    # Get auth logs with pagination and date range filter
+    auth_logs_query = """
+        SELECT id, username, passwd, reply, authdate
+        FROM radpostauth 
+        WHERE username = %s 
+          AND DATE(authdate) >= %s 
+          AND DATE(authdate) <= %s
+        ORDER BY authdate DESC
+        LIMIT %s OFFSET %s
+    """
+    logs = db_manager.execute_query(auth_logs_query, (username, start_date, end_date, limit, offset))
+    
+    return PaginatedResponse(count=count, data=logs)
+
 # NAS Management
 @app.post("/nas", response_model=StatusResponse)
 async def create_nas(
@@ -406,6 +628,83 @@ async def create_nas(
     db_manager.execute_query(insert_query, (nasname, shortname, type, secret, description), fetch=False)
     
     return StatusResponse(message="NAS created successfully")
+
+@app.delete("/nas/{nasname}", response_model=StatusResponse)
+async def delete_nas(
+    nasname: str,
+    token: str = Depends(verify_token)
+):
+    """Delete a NAS entry."""
+    
+    # Check if NAS exists
+    check_query = "SELECT COUNT(*) as count FROM nas WHERE nasname = %s"
+    result = db_manager.execute_query(check_query, (nasname,))
+    
+    if result[0]['count'] == 0:
+        raise HTTPException(status_code=404, detail="NAS not found")
+    
+    # Check if NAS is being used in active sessions
+    active_sessions_query = "SELECT COUNT(*) as count FROM radacct WHERE nasipaddress = %s AND acctstoptime IS NULL"
+    active_sessions = db_manager.execute_query(active_sessions_query, (nasname,))
+    
+    if active_sessions[0]['count'] > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete NAS. {active_sessions[0]['count']} active session(s) found"
+        )
+    
+    # Delete NAS
+    delete_query = "DELETE FROM nas WHERE nasname = %s"
+    db_manager.execute_query(delete_query, (nasname,), fetch=False)
+    
+    return StatusResponse(message=f"NAS '{nasname}' deleted successfully")
+
+@app.put("/nas/{nasname}", response_model=StatusResponse)
+async def update_nas(
+    nasname: str,
+    nas_update: NasUpdate,
+    token: str = Depends(verify_token)
+):
+    """Update NAS configuration."""
+    
+    # Check if NAS exists
+    check_query = "SELECT * FROM nas WHERE nasname = %s"
+    existing_nas = db_manager.execute_query(check_query, (nasname,))
+    
+    if not existing_nas:
+        raise HTTPException(status_code=404, detail="NAS not found")
+    
+    # Build dynamic update query
+    update_fields = []
+    update_values = []
+    
+    if nas_update.shortname is not None:
+        update_fields.append("shortname = %s")
+        update_values.append(nas_update.shortname)
+    
+    if nas_update.secret is not None:
+        update_fields.append("secret = %s")
+        update_values.append(nas_update.secret)
+    
+    if nas_update.type is not None:
+        update_fields.append("type = %s")
+        update_values.append(nas_update.type)
+    
+    if nas_update.description is not None:
+        update_fields.append("description = %s")
+        update_values.append(nas_update.description)
+    
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields provided for update")
+    
+    # Add nasname for WHERE clause
+    update_values.append(nasname)
+    
+    # Execute update
+    update_query = f"UPDATE nas SET {', '.join(update_fields)} WHERE nasname = %s"
+    db_manager.execute_query(update_query, tuple(update_values), fetch=False)
+    
+    return StatusResponse(message=f"NAS '{nasname}' updated successfully")
 
 # Session Disconnect
 @app.post("/session-dis", response_model=StatusResponse)
@@ -510,6 +809,83 @@ async def disconnect_user(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Session disconnect failed: {str(e)}")
+
+# Data Retention / Cleanup APIs
+@app.post("/cleanup/radacct", response_model=StatusResponse)
+async def cleanup_accounting_data(
+    request: DataCleanupRequest,
+    token: str = Depends(verify_token)
+):
+    """Delete accounting records older than specified days."""
+    
+    # Safety validation
+    if request.retain_days < 30:
+        raise HTTPException(status_code=400, detail="Minimum retention: 30 days for accounting data")
+    
+    # Preview mode if confirm=False
+    if not request.confirm:
+        preview_query = """
+            SELECT COUNT(*) as records_to_delete,
+                   MIN(acctstarttime) as oldest_record
+            FROM radacct 
+            WHERE acctstarttime < DATE_SUB(NOW(), INTERVAL %s DAY)
+        """
+        result = db_manager.execute_query(preview_query, (request.retain_days,))
+        oldest_date = str(result[0]['oldest_record']) if result[0]['oldest_record'] else "None"
+        count = result[0]['records_to_delete']
+        
+        return StatusResponse(
+            message=f"PREVIEW: Would delete {count} accounting records older than {request.retain_days} days. Oldest record: {oldest_date}. Set confirm=true to execute deletion."
+        )
+    
+    # Execute deletion
+    delete_query = """
+        DELETE FROM radacct 
+        WHERE acctstarttime < DATE_SUB(NOW(), INTERVAL %s DAY)
+    """
+    deleted_count = db_manager.execute_query(delete_query, (request.retain_days,), fetch=False)
+    
+    return StatusResponse(
+        message=f"Successfully deleted {deleted_count} accounting records older than {request.retain_days} days"
+    )
+
+@app.post("/cleanup/radpostauth", response_model=StatusResponse)
+async def cleanup_auth_logs(
+    request: DataCleanupRequest,
+    token: str = Depends(verify_token)
+):
+    """Delete authentication logs older than specified days."""
+    
+    # Safety validation  
+    if request.retain_days < 7:
+        raise HTTPException(status_code=400, detail="Minimum retention: 7 days for auth logs")
+    
+    # Preview mode if confirm=False
+    if not request.confirm:
+        preview_query = """
+            SELECT COUNT(*) as records_to_delete,
+                   MIN(authdate) as oldest_record
+            FROM radpostauth 
+            WHERE authdate < DATE_SUB(NOW(), INTERVAL %s DAY)
+        """
+        result = db_manager.execute_query(preview_query, (request.retain_days,))
+        oldest_date = str(result[0]['oldest_record']) if result[0]['oldest_record'] else "None"
+        count = result[0]['records_to_delete']
+        
+        return StatusResponse(
+            message=f"PREVIEW: Would delete {count} authentication log records older than {request.retain_days} days. Oldest record: {oldest_date}. Set confirm=true to execute deletion."
+        )
+    
+    # Execute deletion
+    delete_query = """
+        DELETE FROM radpostauth 
+        WHERE authdate < DATE_SUB(NOW(), INTERVAL %s DAY)
+    """
+    deleted_count = db_manager.execute_query(delete_query, (request.retain_days,), fetch=False)
+    
+    return StatusResponse(
+        message=f"Successfully deleted {deleted_count} authentication log records older than {request.retain_days} days"
+    )
 
 # Health Check
 @app.get("/health")

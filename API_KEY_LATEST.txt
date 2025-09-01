@@ -1,0 +1,81 @@
+RADIUS Management API - Fresh Deployment Information
+======================================================
+
+🔑 NEW API Key: 4dffc5ac26dee193fbe478a5b2666bac41102412d00b73ffcf2a72b0645a207c
+Generated: 2025-09-01 09:16:38
+
+⚠️  IMPORTANT: This is a fresh deployment with a NEW API key!
+Save this key securely - it's required for all API requests.
+
+🚀 Deployment Status: ✅ SUCCESSFUL
+====================================
+
+All services are running:
+- 🔌 API Service: Running on http://localhost:8000
+- 🗄️ Database: MySQL running on port 3306  
+- 📡 FreeRADIUS: Running on ports 1812, 1813, 3799
+- 🛠️ radclient: Installed for session disconnect
+
+🆕 Complete API Endpoint List:
+===============================
+
+## User Management:
+- POST /user - Create user
+- GET /user/{username} - Get user details  
+- DELETE /user/{username} - Delete user
+
+## Package Management:
+- POST /package - Create package
+- GET /package/{limit}/{offset} - List packages
+- DELETE /package/{package_name} - Delete package
+- PUT /package/{package_name} - Update package
+
+## NAS Management:
+- POST /nas - Create NAS
+- DELETE /nas/{nasname} - Delete NAS
+- PUT /nas/{nasname} - Update NAS
+
+## Session Management:
+- POST /session-dis - Disconnect session (manual)
+- POST /disconnect-user - Disconnect user sessions (automatic)
+- POST /change-package - Change user package
+
+## Monitoring & Logs:
+- GET /acct/{username}/{limit}/{offset} - User accounting
+- GET /authlog/{username}/{limit}/{offset} - Authentication logs
+- GET /online - All online users
+- GET /onlinecount - Online user count
+- GET /online/{username} - User online status
+
+## System:
+- GET / - API status
+- GET /health - Health check
+- GET /docs - Interactive API documentation
+
+🔐 Authentication Header:
+========================
+Authorization: Bearer 4dffc5ac26dee193fbe478a5b2666bac41102412d00b73ffcf2a72b0645a207c
+
+🌐 Access URLs:
+===============
+- API Base: http://localhost:8000
+- Interactive Docs: http://localhost:8000/docs
+- Health Check: http://localhost:8000/health
+
+✨ Latest Features Included:
+============================
+✅ Session disconnect with dynamic secret lookup
+✅ User package change functionality
+✅ Complete CRUD operations for packages and NAS
+✅ Authentication log retrieval from radpostauth table
+✅ freeradius-utils installed for radclient commands
+✅ Full pagination support for all list endpoints
+✅ Comprehensive error handling and validation
+
+🔧 Docker Container Status:
+============================
+- radius-api: ✅ Running
+- radius-db: ✅ Running  
+- freeradius-server: ✅ Running
+
+Ready for production use! 🚀
