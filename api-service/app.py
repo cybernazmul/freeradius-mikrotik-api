@@ -58,6 +58,9 @@ class PaginatedResponse(BaseModel):
     count: int
     data: List[Any]
 
+class DisconnectUserRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=64)
+
 # Database Connection Manager
 class DatabaseManager:
     def __init__(self):
@@ -424,6 +427,87 @@ async def disconnect_session(
     
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=500, detail="Session disconnect timeout")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Session disconnect failed: {str(e)}")
+
+@app.post("/disconnect-user", response_model=StatusResponse)
+async def disconnect_user(
+    request: DisconnectUserRequest,
+    token: str = Depends(verify_token)
+):
+    """Disconnect all active sessions for a user by username."""
+    
+    try:
+        # Get all active sessions for the user
+        active_sessions_query = """
+            SELECT acctsessionid, nasipaddress 
+            FROM radacct 
+            WHERE username = %s AND acctstoptime IS NULL
+        """
+        sessions = db_manager.execute_query(active_sessions_query, (request.username,))
+        
+        if not sessions:
+            raise HTTPException(status_code=404, detail="No active sessions found for user")
+        
+        disconnected_sessions = []
+        failed_sessions = []
+        
+        for session in sessions:
+            session_id = session['acctsessionid']
+            nas_ip = session['nasipaddress']
+            
+            # Get NAS secret from nas table
+            nas_secret_query = """
+                SELECT secret 
+                FROM nas 
+                WHERE nasname = %s
+                LIMIT 1
+            """
+            nas_result = db_manager.execute_query(nas_secret_query, (nas_ip,))
+            
+            if not nas_result:
+                failed_sessions.append({
+                    "session_id": session_id,
+                    "nas_ip": nas_ip,
+                    "error": "NAS secret not found"
+                })
+                continue
+            
+            secret = nas_result[0]['secret']
+            
+            # Execute radclient disconnect command
+            cmd = f'echo Acct-Session-Id={session_id} | radclient -r 1 {nas_ip}:3799 disconnect {secret}'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                disconnected_sessions.append({
+                    "session_id": session_id,
+                    "nas_ip": nas_ip
+                })
+            else:
+                failed_sessions.append({
+                    "session_id": session_id,
+                    "nas_ip": nas_ip,
+                    "error": f"Disconnect command failed: {result.stderr}"
+                })
+        
+        # Prepare response message
+        if disconnected_sessions and not failed_sessions:
+            message = f"Successfully disconnected {len(disconnected_sessions)} session(s) for user {request.username}"
+        elif disconnected_sessions and failed_sessions:
+            message = f"Partially successful: {len(disconnected_sessions)} session(s) disconnected, {len(failed_sessions)} failed for user {request.username}"
+        else:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to disconnect all sessions for user {request.username}. Errors: {failed_sessions}"
+            )
+        
+        return StatusResponse(message=message)
+    
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Session disconnect timeout")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Session disconnect failed: {str(e)}")
 

@@ -177,3 +177,24 @@ CREATE TABLE IF NOT EXISTS nasreload (
   reloadtime datetime NOT NULL,
   PRIMARY KEY (nasipaddress)
 ) ENGINE = INNODB;
+
+### Table Last NAS
+
+-- CREATE TABLE IF NOT EXISTS last_nas (
+--   id INT AUTO_INCREMENT PRIMARY KEY,
+--   user_name VARCHAR(255) NOT NULL,
+--   session_id VARCHAR(255) NOT NULL,
+--   nas_ip VARCHAR(45) NOT NULL,
+--   shared_secret VARCHAR(255) NOT NULL
+-- ) ENGINE = InnoDB;
+
+
+-- #. disconnect table
+
+-- CREATE TABLE IF NOT EXISTS disconnection (
+--   id INT AUTO_INCREMENT PRIMARY KEY,
+--   user_name VARCHAR(255) NOT NULL,
+--   sesid VARCHAR(255) NOT NULL,
+--   nas_ip VARCHAR(45) NOT NULL,
+--   shared_secret VARCHAR(255) NOT NULL
+-- ) ENGINE = InnoDB;
