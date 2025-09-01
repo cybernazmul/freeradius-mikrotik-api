@@ -81,8 +81,7 @@ A **production-ready, self-contained RADIUS service** for ISPs that integrates *
   - Authentication: UDP 1812
   - Accounting: UDP 1813  
   - CoA/Disconnect: UDP 3799
-- **MySQL Database**: localhost:5432
-- **Redis Cache**: localhost:6379
+- **MySQL Database**: localhost:3306
 
 ---
 
